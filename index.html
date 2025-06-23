@@ -63,6 +63,8 @@
         <button onclick="setTool('draw')">Draw</button>
         <button onclick="setTool('move')">Move</button>
         <button onclick="addSprite()">Add Sprite</button>
+        <button onclick="undo()">Undo</button>
+        <button onclick="redo()">Redo</button>
         <button onclick="saveDrawing()">Save</button>
       </div>
     </div>
@@ -85,7 +87,29 @@
     let dragOffset = { x: 0, y: 0 };
     let currentDrawingName = '';
 
-    // ---------- Start Menu ----------
+    let undoStack = [];
+    let redoStack = [];
+
+    function saveHistory() {
+      undoStack.push(JSON.stringify(sprites));
+      if (undoStack.length > 50) undoStack.shift();
+      redoStack = [];
+    }
+
+    function undo() {
+      if (undoStack.length === 0) return;
+      redoStack.push(JSON.stringify(sprites));
+      sprites = JSON.parse(undoStack.pop());
+      drawAll();
+    }
+
+    function redo() {
+      if (redoStack.length === 0) return;
+      undoStack.push(JSON.stringify(sprites));
+      sprites = JSON.parse(redoStack.pop());
+      drawAll();
+    }
+
     function loadDrawingList() {
       drawingSelect.innerHTML = '';
       for (let key in localStorage) {
@@ -104,6 +128,8 @@
       if (Array.isArray(data)) {
         sprites = data;
         currentDrawingName = key.replace("drawnice_", "");
+        undoStack = [];
+        redoStack = [];
         document.getElementById('start-menu').style.display = 'none';
         document.getElementById('app').style.display = 'flex';
         drawAll();
@@ -116,6 +142,8 @@
       currentDrawingName = name;
       sprites = [];
       selectedSprite = null;
+      undoStack = [];
+      redoStack = [];
       document.getElementById('start-menu').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       drawAll();
@@ -125,22 +153,22 @@
       if (!currentDrawingName) return;
       localStorage.setItem("drawnice_" + currentDrawingName, JSON.stringify(sprites));
       alert("Saved as: " + currentDrawingName);
-      loadDrawingList(); // refresh dropdown
+      loadDrawingList();
     }
 
     loadDrawingList();
 
-    // ---------- Drawing & Interaction ----------
     function getCurrentColor() {
       return `rgb(${redSlider.value}, ${greenSlider.value}, ${blueSlider.value})`;
     }
 
     function addSprite() {
+      saveHistory();
       const newSprite = {
         x: 100 + Math.random() * 200,
         y: 100 + Math.random() * 200,
         color: getCurrentColor(),
-        shape: [] // list of points relative to (x, y)
+        shape: []
       };
       sprites.push(newSprite);
       selectedSprite = newSprite;
@@ -168,6 +196,7 @@
           }
         }
       } else if (tool === 'draw' && selectedSprite) {
+        saveHistory();
         const localX = x - selectedSprite.x;
         const localY = y - selectedSprite.y;
         selectedSprite.shape.push({ x: localX, y: localY });
@@ -184,6 +213,7 @@
     });
 
     canvas.addEventListener('mouseup', () => {
+      if (isDragging) saveHistory();
       isDragging = false;
     });
 
