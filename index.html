@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>DrawNice</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #f0f0f0;
+    }
+    canvas {
+      border: 2px solid black;
+      background: white;
+      margin-top: 10px;
+    }
+    .controls, .start-menu {
+      margin-top: 20px;
+    }
+    .sliders {
+      display: flex;
+      flex-direction: column;
+    }
+    .tools {
+      display: flex;
+      gap: 10px;
+      margin-left: 20px;
+    }
+    button {
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    #app {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>DrawNice</h1>
+
+  <div class="start-menu" id="start-menu">
+    <label for="drawingSelect">Select drawing:</label>
+    <select id="drawingSelect"></select>
+    <button onclick="startDrawing()">Load Drawing</button>
+    <br><br>
+    <button onclick="createNewDrawing()">Create New</button>
+  </div>
+
+  <div id="app">
+    <div class="controls">
+      <div class="sliders">
+        <label>Rood: <input type="range" id="red" min="0" max="255" value="0"></label>
+        <label>Groen: <input type="range" id="green" min="0" max="255" value="0"></label>
+        <label>Blauw: <input type="range" id="blue" min="0" max="255" value="0"></label>
+      </div>
+      <div class="tools">
+        <button onclick="setTool('draw')">Teken</button>
+        <button onclick="setTool('move')">Verplaats</button>
+        <button onclick="addSprite()">Nieuwe Sprite</button>
+        <button onclick="saveDrawing()">Opslaan</button>
+      </div>
+    </div>
+
+    <canvas id="canvas" width="800" height="600"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const redSlider = document.getElementById('red');
+    const greenSlider = document.getElementById('green');
+    const blueSlider = document.getElementById('blue');
+    const drawingSelect = document.getElementById('drawingSelect');
+
+    let sprites = [];
+    let selectedSprite = null;
+    let tool = 'draw';
+    let isDragging = false;
+    let dragOffset = {x: 0, y: 0};
+    let currentDrawingName = '';
+
+    // ---------- Startmenu ----------
+    function loadDrawingList() {
+      drawingSelect.innerHTML = '';
+      for (let key in localStorage) {
+        if (key.startsWith("drawnice_")) {
+          const option = document.createElement('option');
+          option.value = key;
+          option.textContent = key.replace("drawnice_", "");
+          drawingSelect.appendChild(option);
+        }
+      }
+    }
+
+    function startDrawing() {
+      const key = drawingSelect.value;
+      const data = JSON.parse(localStorage.getItem(key));
+      if (data) {
+        sprites = data;
+        currentDrawingName = key.replace("drawnice_", "");
+        document.getElementById('start-menu').style.display = 'none';
+        document.getElementById('app').style.display = 'flex';
+        drawAll();
+      }
+    }
+
+    function createNewDrawing() {
+      const name = prompt("Naam van nieuwe tekening:");
+      if (!name) return;
+      currentDrawingName = name;
+      sprites = [];
+      document.getElementById('start-menu').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      drawAll();
+    }
+
+    function saveDrawing() {
+      if (!currentDrawingName) return;
+      localStorage.setItem("drawnice_" + currentDrawingName, JSON.stringify(sprites));
+      alert("Opgeslagen als: " + currentDrawingName);
+      loadDrawingList(); // update dropdown
+    }
+
+    loadDrawingList();
+
+    // ---------- Tekenfunctionaliteit ----------
+    function getCurrentColor() {
+      return `rgb(${redSlider.value}, ${greenSlider.value}, ${blueSlider.value})`;
+    }
+
+    function addSprite() {
+      const newSprite = {
+        x: 100 + Math.random() * 200,
+        y: 100 + Math.random() * 200,
+        color: getCurrentColor(),
+        shape: [] // array van lijnen
+      };
+      sprites.push(newSprite);
+      selectedSprite = newSprite;
+      drawAll();
+    }
+
+    function setTool(name) {
+      tool = name;
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      if (tool === 'move') {
+        for (let sprite of sprites) {
+          if (ctx.isPointInPath(getSpritePath(sprite), x, y)) {
+            selectedSprite = sprite;
+            isDragging = true;
+            dragOffset.x = x - sprite.x;
+            dragOffset.y = y - sprite.y;
+            break;
+          }
+        }
+      } else if (tool === 'draw' && selectedSprite) {
+        selectedSprite.shape.push({x: x - selectedSprite.x, y: y - selectedSprite.y});
+        drawAll();
+      }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isDragging || !selectedSprite) return;
+      const rect = canvas.getBoundingClientRect();
+      selectedSprite.x = e.clientX - rect.left - dragOffset.x;
+      selectedSprite.y = e.clientY - rect.top - dragOffset.y;
+      drawAll();
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    function getSpritePath(sprite) {
+      const path = new Path2D();
+      if (sprite.shape.length > 0) {
+        path.moveTo(sprite.x + sprite.shape[0].x, sprite.y + sprite.shape[0].y);
+        for (let point of sprite.shape.slice(1)) {
+          path.lineTo(sprite.x + point.x, sprite.y + point.y);
+        }
+      }
+      return path;
+    }
+
+    function drawAll() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let sprite of sprites) {
+        ctx.beginPath();
+        const path = getSpritePath(sprite);
+        ctx.strokeStyle = sprite.color;
+        ctx.stroke(path);
+      }
+    }
+  </script>
+</body>
+</html>
