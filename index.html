@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>DrawNice</title>
@@ -45,25 +45,25 @@
   <h1>DrawNice</h1>
 
   <div class="start-menu" id="start-menu">
-    <label for="drawingSelect">Select drawing:</label>
+    <label for="drawingSelect">Select a drawing:</label>
     <select id="drawingSelect"></select>
     <button onclick="startDrawing()">Load Drawing</button>
     <br><br>
-    <button onclick="createNewDrawing()">Create New</button>
+    <button onclick="createNewDrawing()">Create New Drawing</button>
   </div>
 
   <div id="app">
     <div class="controls">
       <div class="sliders">
-        <label>Rood: <input type="range" id="red" min="0" max="255" value="0"></label>
-        <label>Groen: <input type="range" id="green" min="0" max="255" value="0"></label>
-        <label>Blauw: <input type="range" id="blue" min="0" max="255" value="0"></label>
+        <label>Red: <input type="range" id="red" min="0" max="255" value="0"></label>
+        <label>Green: <input type="range" id="green" min="0" max="255" value="0"></label>
+        <label>Blue: <input type="range" id="blue" min="0" max="255" value="0"></label>
       </div>
       <div class="tools">
-        <button onclick="setTool('draw')">Teken</button>
-        <button onclick="setTool('move')">Verplaats</button>
-        <button onclick="addSprite()">Nieuwe Sprite</button>
-        <button onclick="saveDrawing()">Opslaan</button>
+        <button onclick="setTool('draw')">Draw</button>
+        <button onclick="setTool('move')">Move</button>
+        <button onclick="addSprite()">Add Sprite</button>
+        <button onclick="saveDrawing()">Save</button>
       </div>
     </div>
 
@@ -82,10 +82,10 @@
     let selectedSprite = null;
     let tool = 'draw';
     let isDragging = false;
-    let dragOffset = {x: 0, y: 0};
+    let dragOffset = { x: 0, y: 0 };
     let currentDrawingName = '';
 
-    // ---------- Startmenu ----------
+    // ---------- Start Menu ----------
     function loadDrawingList() {
       drawingSelect.innerHTML = '';
       for (let key in localStorage) {
@@ -101,7 +101,7 @@
     function startDrawing() {
       const key = drawingSelect.value;
       const data = JSON.parse(localStorage.getItem(key));
-      if (data) {
+      if (Array.isArray(data)) {
         sprites = data;
         currentDrawingName = key.replace("drawnice_", "");
         document.getElementById('start-menu').style.display = 'none';
@@ -111,10 +111,11 @@
     }
 
     function createNewDrawing() {
-      const name = prompt("Naam van nieuwe tekening:");
+      const name = prompt("Enter name for new drawing:");
       if (!name) return;
       currentDrawingName = name;
       sprites = [];
+      selectedSprite = null;
       document.getElementById('start-menu').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       drawAll();
@@ -123,13 +124,13 @@
     function saveDrawing() {
       if (!currentDrawingName) return;
       localStorage.setItem("drawnice_" + currentDrawingName, JSON.stringify(sprites));
-      alert("Opgeslagen als: " + currentDrawingName);
-      loadDrawingList(); // update dropdown
+      alert("Saved as: " + currentDrawingName);
+      loadDrawingList(); // refresh dropdown
     }
 
     loadDrawingList();
 
-    // ---------- Tekenfunctionaliteit ----------
+    // ---------- Drawing & Interaction ----------
     function getCurrentColor() {
       return `rgb(${redSlider.value}, ${greenSlider.value}, ${blueSlider.value})`;
     }
@@ -139,7 +140,7 @@
         x: 100 + Math.random() * 200,
         y: 100 + Math.random() * 200,
         color: getCurrentColor(),
-        shape: [] // array van lijnen
+        shape: [] // list of points relative to (x, y)
       };
       sprites.push(newSprite);
       selectedSprite = newSprite;
@@ -156,17 +157,20 @@
       const y = e.clientY - rect.top;
 
       if (tool === 'move') {
-        for (let sprite of sprites) {
-          if (ctx.isPointInPath(getSpritePath(sprite), x, y)) {
+        for (let sprite of sprites.slice().reverse()) {
+          const path = getSpritePath(sprite);
+          if (path && ctx.isPointInPath(path, x, y)) {
             selectedSprite = sprite;
             isDragging = true;
             dragOffset.x = x - sprite.x;
             dragOffset.y = y - sprite.y;
-            break;
+            return;
           }
         }
       } else if (tool === 'draw' && selectedSprite) {
-        selectedSprite.shape.push({x: x - selectedSprite.x, y: y - selectedSprite.y});
+        const localX = x - selectedSprite.x;
+        const localY = y - selectedSprite.y;
+        selectedSprite.shape.push({ x: localX, y: localY });
         drawAll();
       }
     });
@@ -184,12 +188,11 @@
     });
 
     function getSpritePath(sprite) {
+      if (!sprite.shape || sprite.shape.length < 2) return null;
       const path = new Path2D();
-      if (sprite.shape.length > 0) {
-        path.moveTo(sprite.x + sprite.shape[0].x, sprite.y + sprite.shape[0].y);
-        for (let point of sprite.shape.slice(1)) {
-          path.lineTo(sprite.x + point.x, sprite.y + point.y);
-        }
+      path.moveTo(sprite.x + sprite.shape[0].x, sprite.y + sprite.shape[0].y);
+      for (let point of sprite.shape.slice(1)) {
+        path.lineTo(sprite.x + point.x, sprite.y + point.y);
       }
       return path;
     }
@@ -197,10 +200,14 @@
     function drawAll() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (let sprite of sprites) {
-        ctx.beginPath();
-        const path = getSpritePath(sprite);
-        ctx.strokeStyle = sprite.color;
-        ctx.stroke(path);
+        if (sprite.shape.length > 0) {
+          ctx.beginPath();
+          const path = getSpritePath(sprite);
+          if (path) {
+            ctx.strokeStyle = sprite.color || 'black';
+            ctx.stroke(path);
+          }
+        }
       }
     }
   </script>
